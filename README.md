@@ -7,6 +7,9 @@ and `/metrics` reports how often each band turns out to be real fraud.
 
 ClaimGuard sends claims to people for review. It never rejects a claim by itself.
 
+The design decisions, architecture and results are written up in
+[docs/ClaimGuard_Project_Report.pdf](docs/ClaimGuard_Project_Report.pdf).
+
 ## Quick start
 
 ```bash
