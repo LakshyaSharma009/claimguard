@@ -52,14 +52,17 @@ HGB_SEARCH_SPACE = {
 }
 
 
-def calibrate(pipeline: Pipeline, X, y) -> CalibratedClassifierCV:
-    """Platt scaling fitted on out-of-fold predictions.
+def calibrated_model(pipeline: Pipeline) -> CalibratedClassifierCV:
+    """Unfitted Platt-scaling wrapper (sigmoid fitted on out-of-fold predictions).
 
     ensemble=False keeps one base model trained on all rows, which SHAP can explain;
-    sigmoid is used over isotonic because there are only ~400 fraud cases to fit on.
+    sigmoid is used over isotonic because there are only a few hundred fraud cases to fit on.
     """
-    cal = CalibratedClassifierCV(pipeline, method="sigmoid", cv=5, ensemble=False)
-    return cal.fit(X, y)
+    return CalibratedClassifierCV(pipeline, method="sigmoid", cv=5, ensemble=False)
+
+
+def calibrate(pipeline: Pipeline, X, y) -> CalibratedClassifierCV:
+    return calibrated_model(pipeline).fit(X, y)
 
 
 def base_pipeline(calibrated: CalibratedClassifierCV) -> Pipeline:

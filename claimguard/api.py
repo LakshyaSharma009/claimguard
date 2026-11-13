@@ -201,6 +201,8 @@ def health() -> dict:
         "status": "ok",
         "model_version": state.scorer.model_version,
         "trained_at": b.get("trained_at"),
+        "training_years": b.get("training_years"),
+        "training_claims": b.get("training_claims"),
         "thresholds": b["thresholds"],
         "combine_weight": b["combine_weight"],
         "rules_loaded": [r.id for r in state.scorer.rules],

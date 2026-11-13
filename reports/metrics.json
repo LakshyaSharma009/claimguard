@@ -1,5 +1,5 @@
 {
-  "model_version": "hgb-v1",
+  "model_version": "hgb-v2",
   "kind": "hgb",
   "params": {
     "min_samples_leaf": 20,
@@ -13,7 +13,7 @@
   "include_calendar": false,
   "use_smote": false,
   "combine_weight": 1.0,
-  "thresholds": {
+  "thresholds_1994_model": {
     "medium": 0.09440811531766963,
     "high": 0.20887991879070955
   },
@@ -46,6 +46,70 @@
         "fn": 92,
         "tp": 121
       }
+    }
+  },
+  "forward_check": [
+    {
+      "model": "A: thresholds from 1995 (method above)",
+      "trained_on": "1994",
+      "train_claims": 6141,
+      "test_pr_auc": 0.1358298646335404,
+      "recall_top10": 0.26291079812206575,
+      "review_rate": 0.28924810188586825,
+      "recall@review": 0.568075117370892,
+      "cost_per_claim": 0.4849375459221161,
+      "medium": 0.09440811531766963,
+      "high": 0.20887991879070955
+    },
+    {
+      "model": "B: out-of-fold thresholds",
+      "trained_on": "1994",
+      "train_claims": 6141,
+      "test_pr_auc": 0.1358298646335404,
+      "recall_top10": 0.26291079812206575,
+      "review_rate": 0.3455792309576292,
+      "recall@review": 0.6854460093896714,
+      "cost_per_claim": 0.4739162380602498,
+      "medium": 0.08381502568552197,
+      "high": 0.22536047210686164
+    },
+    {
+      "model": "C: out-of-fold thresholds",
+      "trained_on": "1994-1995",
+      "train_claims": 11336,
+      "test_pr_auc": 0.15982839515334812,
+      "recall_top10": 0.2676056338028169,
+      "review_rate": 0.22948812147930445,
+      "recall@review": 0.4788732394366197,
+      "cost_per_claim": 0.476365417585109,
+      "medium": 0.12024891461573431,
+      "high": 0.19467779018339926
+    }
+  ],
+  "forward_bootstrap_c_minus_a": {
+    "mean": 0.023144467147949817,
+    "ci_low": 0.004843909157852484,
+    "ci_high": 0.04292876137102492,
+    "share_c_better": 0.992
+  },
+  "shipped": {
+    "final_fit": "all_years",
+    "training_years": [
+      1994,
+      1995,
+      1996
+    ],
+    "training_claims": 14345,
+    "training_fraud": 817,
+    "thresholds": {
+      "medium": 0.09773003861515048,
+      "high": 0.17426713003370542
+    },
+    "holdout": {
+      "claims": 1074,
+      "fraud": 106,
+      "pr_auc": 0.22355026560596225,
+      "roc_auc": 0.7778340870107593
     }
   }
 }

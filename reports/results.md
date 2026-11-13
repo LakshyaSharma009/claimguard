@@ -1,6 +1,6 @@
 # ClaimGuard results
 
-Generated 2026-11-12T18:32:48+00:00 · model `hgb-v1` · config `b2ef4040de836fc5`
+Generated 2026-11-13T03:13:33+00:00 · model `hgb-v2` · config `733c657a2e73d77b`
 
 ## Data and time split
 
@@ -88,19 +88,35 @@ Chosen weight: **1.0**. Thresholds: MEDIUM >= 0.0944 (cost-minimising at 10:1), 
 | fraud | 121 | 92 |
 | honest | 1060 | 2810 |
 
-## Global feature importance (mean |SHAP|, test year)
+## More training years (same settings; every row scored on all of 1996)
+
+| model | trained_on | train_claims | test_pr_auc | recall_top10 | review_rate | recall@review | cost_per_claim | medium | high |
+|---|---|---|---|---|---|---|---|---|---|
+| A: thresholds from 1995 (method above) | 1994 | 6141 | 0.1358 | 0.2629 | 0.2892 | 0.5681 | 0.4849 | 0.0944 | 0.2089 |
+| B: out-of-fold thresholds | 1994 | 6141 | 0.1358 | 0.2629 | 0.3456 | 0.6854 | 0.4739 | 0.0838 | 0.2254 |
+| C: out-of-fold thresholds | 1994-1995 | 11336 | 0.1598 | 0.2676 | 0.2295 | 0.4789 | 0.4764 | 0.1202 | 0.1947 |
+
+A is the method above. B changes only how thresholds are set (out-of-fold scores inside the training year instead of a separate year), so A vs B shows whether that change is safe. C adds 1995 to the training data.
+
+Paired bootstrap of C minus A PR-AUC over the same 1996 claims (2000 resamples): +0.0231, 95% CI [+0.0048, +0.0429]; C was better in 99.2% of resamples.
+
+## Shipped model
+
+Fit: **all_years** (`final_fit` in config/thresholds.yaml) on 14345 claims from 1994, 1995, 1996 (817 fraud). The 1074-claim CI holdout from 1996 is left out of training. Thresholds from out-of-fold scores: MEDIUM >= 0.0977, HIGH >= 0.1743. Holdout PR-AUC 0.224, ROC-AUC 0.778 (holdout fraud rate 0.099). There is no later year left to test it on, so its expected performance on new claims is the matching row of the table above (C: out-of-fold thresholds, trained on 1994-1995).
+
+## Global feature importance (mean |SHAP|, shipped model on the CI holdout)
 
 | feature | mean_abs_shap |
 |---|---|
-| Fault | 1.6256 |
-| BasePolicy | 0.7657 |
-| PolicyType | 0.1819 |
-| NumberOfSuppliments | 0.0950 |
-| VehiclePrice | 0.0890 |
-| Make | 0.0835 |
-| AddressChange_Claim | 0.0611 |
-| PastNumberOfClaims | 0.0590 |
-| AgeOfVehicle | 0.0577 |
-| AgentType | 0.0435 |
-| AccidentArea | 0.0370 |
-| DriverRating | 0.0286 |
+| Fault | 1.3504 |
+| BasePolicy | 0.7576 |
+| PolicyType | 0.1344 |
+| AddressChange_Claim | 0.0700 |
+| Make | 0.0639 |
+| AgeOfVehicle | 0.0347 |
+| VehiclePrice | 0.0248 |
+| NumberOfSuppliments | 0.0167 |
+| DriverRating | 0.0124 |
+| AccidentArea | 0.0113 |
+| PoliceReportFiled | 0.0079 |
+| AgentType | 0.0070 |

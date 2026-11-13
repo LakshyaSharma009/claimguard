@@ -17,6 +17,13 @@ combine_weight_grid: [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 # Band given at minimum to a claim that hits a rule marked strong.
 strong_rule_min_band: MEDIUM
 
+# Which claims the shipped model learns from. Model choices are always made on
+# 1994 (train) / 1995 (valid) / 1996 (test), and that test is reported either way.
+#   all_years   refit on 1994-1996 (minus the CI holdout sample); thresholds from
+#               out-of-fold scores. reports/results.md checks this method on 1996.
+#   train_year  ship the 1994 model with thresholds from 1995.
+final_fit: all_years
+
 # Policy, not a tuning choice: Sex, Age and AgeOfPolicyHolder are not used by the
 # shipped model. Training still fits both versions and reports the cost of this
 # choice (PR-AUC) and its effect (flag rate per group) in reports/fairness.md.

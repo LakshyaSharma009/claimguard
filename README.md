@@ -76,7 +76,8 @@ python -m claimguard.audit verify
    set the minimum band and are shown to investigators as reasons.
 4. **Bands.** MEDIUM is the score where reviewing costs less than missing fraud, given the cost
    ratio in `config/thresholds.yaml`. HIGH is the top 5% of scores, sized to the
-   investigation team's capacity.
+   investigation team's capacity. For the shipped model both thresholds are set from
+   out-of-fold scores (see below): MEDIUM >= 0.098, HIGH >= 0.174.
 5. **Reasons.** SHAP values per claim, written out as text using `config/reasons.yaml`.
 
 ## Evaluation
@@ -90,8 +91,35 @@ Full tables are in `reports/results.md`.
 | rules only | 0.062 | 0.532 | 15% |
 | ClaimGuard model | 0.136 | 0.778 | 26% |
 
-The fraud base rate is 5.2%. Reviewing MEDIUM + HIGH (26% of claims) catches 55% of the fraud.
-At the assumed 10:1 cost ratio this costs 0.485 per claim, against 0.522 for reviewing nothing.
+The fraud base rate is 5.2%. With the 1994 model, reviewing MEDIUM + HIGH (29% of claims) catches
+57% of the fraud. At the assumed 10:1 cost ratio this costs 0.485 per claim, against 0.522 for
+reviewing nothing.
+
+### The shipped model uses all three years
+
+Every choice above is made on the 1994/1995/1996 split. The shipped model is then refit with the
+same settings on all three years: 14,345 claims with 817 fraud cases, twice the 409 cases in 1994.
+The CI holdout (1,074 claims from 1996) is left out. With 1995 now training data, there is no spare
+year for the thresholds, so they come from out-of-fold scores: 5-fold cross-validation over the
+training claims, so each score comes from a model that did not see that claim.
+
+There is no later year to test the shipped model on, so training checks the method on 1996,
+using models that never saw 1996:
+
+| on all of 1996 | trained on | PR-AUC | review rate | fraud caught | cost per claim |
+|---|---|---|---|---|---|
+| A: thresholds from 1995 | 1994 | 0.136 | 29% | 57% | 0.485 |
+| B: out-of-fold thresholds | 1994 | 0.136 | 35% | 69% | 0.474 |
+| C: out-of-fold thresholds | 1994 + 1995 | 0.160 | 23% | 48% | 0.476 |
+
+- A vs B: out-of-fold thresholds are as good as a separate year, at a slightly lower cost.
+- A vs C: more training years rank fraud better. A paired bootstrap on the same 1996 claims puts
+  the PR-AUC gain at +0.023, 95% CI [+0.005, +0.043]; the 1994+1995 model was better in 99.2% of
+  resamples (computed by `train.py`, reported in `reports/results.md`).
+- C reviews fewer claims than A because its thresholds came out higher. The cost per claim is
+  about the same.
+
+Set `final_fit: train_year` in `config/thresholds.yaml` and retrain to ship the 1994 model instead.
 
 Decisions worth knowing:
 
@@ -104,7 +132,9 @@ Decisions worth knowing:
 ## Guardrails
 
 - CI (`.github/workflows/ci.yml`) runs the tests against the committed model and a fixed holdout
-  sample, so a retrain that drops below PR-AUC 0.17 / ROC-AUC 0.70 on that sample fails.
+  sample, so a retrain that drops below PR-AUC 0.17 / ROC-AUC 0.70 on that sample fails
+  (the shipped model scores 0.224 / 0.778; the sample is 9.9% fraud). The model stores a hash
+  of the holdout file, and a test checks it, so the model can't silently be trained on those claims.
   CI then builds the Docker image and checks it with a request to `/health`.
 - The model bundle stores a hash of the config files. `/health` reports
   `config_matches_training: false` if the rules or thresholds were edited without retraining.
@@ -115,11 +145,13 @@ Decisions worth knowing:
 
 - One public dataset, from 1994–1996, with no claim amounts. Cost figures use an assumed ratio,
   not money.
-- PR-AUC of 0.136 is a modest result. The model ranks claims for review and is not good enough
-  to deny any claim on its own.
-- The shipped model learns only from the 6,141 claims in 1994, because 1995 was used to set the
-  thresholds and 1996 was held back for testing. Refitting on all three years would likely help,
-  but the thresholds would then need a fresh validation period.
+- A PR-AUC of 0.14–0.16 on an unseen year is a modest result. The model ranks claims for review
+  and is not good enough to deny any claim on its own.
+- The shipped model's own performance on a later year is unknown, because no later year exists.
+  Row C above is the best estimate. Once new claims are reviewed, `/metrics` shows the real
+  confirmed-fraud rate per band.
+- The CI holdout comes from the same year as part of the training data, so its PR-AUC (0.224)
+  is somewhat optimistic. It guards against regressions and is not a forecast.
 - Requirements are pinned because the model is a pickle and must load with the same scikit-learn.
 
 ## Layout
