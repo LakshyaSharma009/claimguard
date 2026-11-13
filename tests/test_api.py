@@ -122,3 +122,44 @@ def test_stored_reasons_match_the_response(client, quiet_claim):
         body = client.post("/score", json={**quiet_claim, "DriverRating": rating, "Deductible": 500}).json()
         stored = client.get(f"/decisions/{body['decision_id']}").json()
         assert stored["model_reasons"] == body["model_reasons"]
+
+
+def test_schema_lists_every_feature_with_valid_options(client):
+    from claimguard import schema as S
+    body = client.get("/schema").json()
+    fields = {f["name"]: f for g in body["groups"] for f in g["fields"]}
+    assert sorted(fields) == sorted(S.FEATURES)
+    assert fields["Fault"]["options"] == S.CATEGORIES["Fault"]
+    assert fields["DriverRating"]["min"] == 1 and fields["DriverRating"]["max"] == 4
+    assert fields["Age"]["optional"] is True and fields["Age"]["used_by_model"] is False
+    assert fields["Fault"]["used_by_model"] is True
+    assert client.post("/score", json=body["example"]).status_code == 200
+
+
+def test_review_queue_filters_and_sorts(client, quiet_claim):
+    flagged = client.post("/score", json={**quiet_claim, "Days_Policy_Accident": "1 to 7",
+                                          "claim_ref": "Q-1"}).json()
+    assert flagged["band"] in {"MEDIUM", "HIGH"}
+    queue = client.get("/decisions", params={"band": ["MEDIUM", "HIGH"], "reviewed": "false"}).json()
+    ids = [d["decision_id"] for d in queue]
+    assert flagged["decision_id"] in ids
+    assert all(d["band"] in {"MEDIUM", "HIGH"} and d["latest_outcome"] is None for d in queue)
+    assert [d["score"] for d in queue] == sorted((d["score"] for d in queue), reverse=True)
+    assert next(d for d in queue if d["decision_id"] == flagged["decision_id"])["claim_ref"] == "Q-1"
+
+    client.post(f"/decisions/{flagged['decision_id']}/review", json={"outcome": "CLEARED", "reviewer": "x"})
+    pending = client.get("/decisions", params={"reviewed": "false", "limit": 500}).json()
+    assert flagged["decision_id"] not in [d["decision_id"] for d in pending]
+    done = client.get("/decisions", params={"reviewed": "true", "sort": "recent"}).json()
+    assert done[0]["decision_id"] == flagged["decision_id"] and done[0]["latest_outcome"] == "CLEARED"
+    assert client.get("/decisions", params={"band": "NOPE"}).status_code == 422
+    assert client.get("/decisions", params={"limit": 0}).status_code == 422
+
+
+def test_web_ui_is_served(client):
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code in (302, 307) and r.headers["location"] == "/ui/"
+    page = client.get("/ui/")
+    assert page.status_code == 200 and "ClaimGuard" in page.text
+    assert client.get("/ui/app.js").status_code == 200
+    assert client.get("/ui/styles.css").status_code == 200

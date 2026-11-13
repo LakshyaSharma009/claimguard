@@ -70,17 +70,26 @@ class Explainer:
         return enc.T.groupby(self.groups, sort=False).sum().T[self.columns]
 
     def reasons(self, claim: Mapping[str, Any], reasons: Mapping[str, Any], top: int = 3) -> list[dict]:
-        row = claims_frame([dict(claim)], self.columns)
-        contrib = self.grouped_shap(row).iloc[0].sort_values(ascending=False)
+        return self.reasons_many([claim], reasons, top)[0]
+
+    def reasons_many(self, claims: list[Mapping[str, Any]], reasons: Mapping[str, Any],
+                     top: int = 3) -> list[list[dict]]:
+        """Top features pushing each claim towards fraud. One SHAP call for the whole list."""
+        frame = claims_frame([dict(c) for c in claims], self.columns)
+        grouped = self.grouped_shap(frame)
         out = []
-        for feature, impact in contrib.items():
-            if impact <= 0 or len(out) >= top:
-                break
-            value = row.at[0, feature]
-            # Plain Python types, so the audit log stores 500, not the string "500".
-            value = None if pd.isna(value) else (value.item() if isinstance(value, np.generic) else value)
-            out.append({"feature": feature,
-                        "value": value,
-                        "text": reason_text(feature, value, reasons),
-                        "impact": round(float(impact), 4)})
+        for i in range(len(frame)):
+            contrib = grouped.iloc[i].sort_values(ascending=False)
+            row = []
+            for feature, impact in contrib.items():
+                if impact <= 0 or len(row) >= top:
+                    break
+                value = frame.at[i, feature]
+                # Plain Python types, so the audit log stores 500, not the string "500".
+                value = None if pd.isna(value) else (value.item() if isinstance(value, np.generic) else value)
+                row.append({"feature": feature,
+                            "value": value,
+                            "text": reason_text(feature, value, reasons),
+                            "impact": round(float(impact), 4)})
+            out.append(row)
         return out

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ClaimGuard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◆</span>
+      <span>ClaimGuard</span>
+      <span class="tagline">claims fraud triage</span>
+    </div>
+    <div id="model-status" class="model-status">Connecting…</div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="score" aria-selected="true">Score a claim</button>
+    <button role="tab" data-tab="batch" aria-selected="false">Batch upload</button>
+    <button role="tab" data-tab="queue" aria-selected="false">Review queue</button>
+    <button role="tab" data-tab="monitor" aria-selected="false">Monitoring</button>
+  </nav>
+
+  <main>
+    <!-- Score one claim -->
+    <section id="tab-score" class="tab-panel">
+      <div class="score-layout">
+        <form id="claim-form" class="card" novalidate>
+          <div class="form-head">
+            <h2>Claim details</h2>
+            <div class="form-actions">
+              <button type="button" class="ghost" data-fill="low">Fill: low-risk example</button>
+              <button type="button" class="ghost" data-fill="high">Fill: high-risk example</button>
+            </div>
+          </div>
+          <label class="field ref-field">
+            <span>Your claim reference <em>(optional)</em></span>
+            <input name="claim_ref" maxlength="64" placeholder="e.g. CLM-2024-0042">
+          </label>
+          <div id="form-groups"></div>
+          <p class="hint"><span class="unused-dot"></span> Greyed fields are recorded but not used by the
+            model (calendar columns and protected attributes; see the project report).</p>
+          <div class="form-footer">
+            <div id="form-error" class="error" role="alert"></div>
+            <button type="submit" class="primary">Score claim</button>
+          </div>
+        </form>
+
+        <aside id="result" class="card result empty">
+          <p class="muted">Fill in the claim and press <strong>Score claim</strong>.
+            The result shows the review band, the red-flag rules that fired and the
+            top reasons from the model.</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Batch -->
+    <section id="tab-batch" class="tab-panel" hidden>
+      <div class="card">
+        <h2>Score a CSV of claims</h2>
+        <p class="muted">Same columns as <code>fraud_oracle.csv</code>; extra columns are ignored, and an
+          optional <code>claim_ref</code> column is echoed back. Up to 5,000 rows. Bad rows are listed
+          and the rest are still scored.</p>
+        <form id="batch-form" class="batch-form">
+          <input type="file" id="batch-file" accept=".csv,text/csv" required>
+          <button type="submit" class="primary">Upload and score</button>
+          <span id="batch-status" class="muted"></span>
+        </form>
+      </div>
+      <div id="batch-result" hidden>
+        <div class="stat-row" id="batch-stats"></div>
+        <div class="card" id="batch-errors-card" hidden>
+          <h3>Rejected rows</h3>
+          <div id="batch-errors"></div>
+        </div>
+        <div class="card">
+          <div class="table-head">
+            <h3>Results <span class="muted">(highest score first)</span></h3>
+            <button type="button" class="ghost" id="batch-download">Download results CSV</button>
+          </div>
+          <div class="table-wrap"><table id="batch-table"></table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Review queue -->
+    <section id="tab-queue" class="tab-panel" hidden>
+      <div class="queue-layout">
+        <div class="card">
+          <div class="table-head">
+            <h2>Review queue</h2>
+            <div class="filters">
+              <label><input type="checkbox" name="band" value="HIGH" checked> HIGH</label>
+              <label><input type="checkbox" name="band" value="MEDIUM" checked> MEDIUM</label>
+              <label><input type="checkbox" name="band" value="LOW"> LOW</label>
+              <select id="queue-reviewed" aria-label="Review status">
+                <option value="false" selected>Not yet reviewed</option>
+                <option value="true">Reviewed</option>
+                <option value="">All</option>
+              </select>
+              <select id="queue-sort" aria-label="Sort">
+                <option value="score">Highest score</option>
+                <option value="recent">Most recent</option>
+              </select>
+              <button type="button" class="ghost" id="queue-refresh">Refresh</button>
+            </div>
+          </div>
+          <div class="table-wrap"><table id="queue-table"></table></div>
+        </div>
+        <aside id="decision-detail" class="card empty">
+          <p class="muted">Select a decision to see the claim, why it was flagged, and to record the
+            investigation outcome.</p>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Monitoring -->
+    <section id="tab-monitor" class="tab-panel" hidden>
+      <div class="card">
+        <div class="table-head">
+          <h2>Outcomes per band</h2>
+          <button type="button" class="ghost" id="monitor-refresh">Refresh</button>
+        </div>
+        <p class="muted">Investigator outcomes recorded against decisions (the latest review counts).
+          If the HIGH band's confirmed-fraud rate drops towards the LOW band's, the model needs attention.</p>
+        <div class="stat-row" id="monitor-stats"></div>
+        <div class="table-wrap"><table id="monitor-table"></table></div>
+      </div>
+      <div class="card">
+        <h2>Model</h2>
+        <dl id="model-info" class="kv"></dl>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">ClaimGuard sends claims to people for review. It never rejects a claim on its own.
+    · <a href="/docs">API docs</a></footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

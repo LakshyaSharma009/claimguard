@@ -84,3 +84,11 @@ def test_strong_rule_claim_is_at_least_medium(scorer, quiet_claim):
     out = scorer.score({**quiet_claim, "Days_Policy_Claim": "8 to 15"}, explain=False)
     assert out["band"] in {"MEDIUM", "HIGH"}
     assert any(h["id"] == "R07_EARLY_CLAIM" for h in out["rule_hits"])
+
+
+def test_score_many_matches_scoring_one_at_a_time(scorer):
+    import pandas as pd
+    from pathlib import Path
+    claims = pd.read_csv(Path(__file__).parent / "fixtures" / "holdout_sample.csv").head(60).to_dict("records")
+    assert scorer.score_many(claims) == [scorer.score(c) for c in claims]
+    assert scorer.score_many([]) == []

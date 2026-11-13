@@ -13,11 +13,23 @@ ClaimGuard sends claims to people for review. It never rejects a claim by itself
 python -m venv .venv
 .venv/Scripts/activate          # Windows; use source .venv/bin/activate on Linux/macOS
 pip install -r requirements-dev.txt
-pytest -q                       # 61 tests, uses the committed model
+pytest -q                       # 68 tests, uses the committed model
 uvicorn claimguard.api:app --reload
 ```
 
-Open http://localhost:8000/docs for the interactive API.
+Open http://localhost:8000 for the web app, or http://localhost:8000/docs for the interactive API.
+
+### Web app
+
+A single page served by the API itself (plain HTML/CSS/JS in `claimguard/static/`, no build step):
+
+- **Score a claim**: a form built from `/schema`, so it only offers values the API accepts.
+  Fields the model doesn't use (calendar columns, Sex/Age) are greyed out. The result shows the
+  band, the score against the thresholds, the rules that fired and the top model reasons.
+- **Batch upload**: score a CSV, see band counts and rejected rows, download the results.
+- **Review queue**: unreviewed MEDIUM/HIGH decisions, highest score first. Open one to see why
+  it was flagged and record *Confirmed fraud* or *Cleared*.
+- **Monitoring**: confirmed-fraud rate per band from investigator outcomes, plus model details.
 
 ### Docker
 
@@ -46,10 +58,15 @@ fixture in `tests/fixtures/`.
 |---|---|---|
 | POST | `/score` | score one claim (JSON). An unknown category or out-of-range number returns 422, never a wrong score |
 | POST | `/score/batch` | score a CSV with the `fraud_oracle.csv` columns (max 5000 rows). Bad rows are listed in `errors` and the rest are still scored |
+| GET | `/decisions` | review queue: filter by `band` (repeatable) and `reviewed`, `sort=score` or `recent`, `limit` up to 500 |
 | GET | `/decisions/{id}` | stored decision plus any reviews |
 | POST | `/decisions/{id}/review` | record `CONFIRMED_FRAUD` or `CLEARED`, with the reviewer and notes |
 | GET | `/metrics` | decisions, reviews and confirmed-fraud rate for each band |
-| GET | `/health` | model version, thresholds, loaded rules, and whether the config matches what the model was trained with |
+| GET | `/health` | model version, training data, thresholds, loaded rules, and whether the config matches what the model was trained with |
+| GET | `/schema` | form fields, allowed values, labels, and whether the model uses each field (drives the web form) |
+
+Batches are scored with one model call and one SHAP call for all rows and logged in one audit
+transaction. The 1,074-claim holdout scores in about 1 second, against 33 seconds one claim at a time.
 
 `Age` is optional: blank, missing or 0 all mean "not recorded". An optional `claim_ref`
 (your own claim number) is stored with the decision and echoed back in the response.
@@ -157,7 +174,7 @@ Decisions worth knowing:
 ## Layout
 
 ```
-claimguard/   api, scoring, rules, model, features, explain, audit, train
+claimguard/   api, scoring, rules, model, features, explain, audit, train; static/ holds the web app
 config/       rules.yaml, thresholds.yaml, reasons.yaml (all business assumptions live here)
 models/       trained model bundle
 reports/      generated results, fairness, rule hit rates, SHAP plots

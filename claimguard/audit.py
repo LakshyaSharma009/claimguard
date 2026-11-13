@@ -100,41 +100,54 @@ class AuditLog:
             conn.close()
 
     def _append(self, table: str, row: dict[str, Any], make_id) -> dict[str, Any]:
-        """Insert one row inside a write lock, so the chain cannot fork."""
+        return self._append_many(table, [row], make_id)[0]
+
+    def _append_many(self, table: str, rows: list[dict[str, Any]], make_id) -> list[dict[str, Any]]:
+        """Insert rows in one transaction under a write lock, so the chain cannot fork.
+
+        All rows are written or none are.
+        """
+        cols = TABLES[table] + ["row_hash"]
+        sql = f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})"
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             try:
                 last = conn.execute(f"SELECT seq, row_hash FROM {table} ORDER BY seq DESC LIMIT 1").fetchone()
-                row["seq"] = (last["seq"] + 1) if last else 1
-                row["prev_hash"] = last["row_hash"] if last else GENESIS
-                row.update(make_id(row["seq"]))
-                row["row_hash"] = row_hash(table, row)
-                cols = TABLES[table] + ["row_hash"]
-                conn.execute(f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
-                             [row[c] for c in cols])
+                seq, prev = (last["seq"], last["row_hash"]) if last else (0, GENESIS)
+                for row in rows:
+                    seq += 1
+                    row["seq"], row["prev_hash"] = seq, prev
+                    row.update(make_id(seq))
+                    row["row_hash"] = prev = row_hash(table, row)
+                    conn.execute(sql, [row[c] for c in cols])
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
                 raise
-        return row
+        return rows
 
     # ---------- writes ----------
 
     def record_decision(self, claim: dict, score: float, band: str, rule_hits: list[dict],
                         model_reasons: list[dict], model_version: str, config_hash: str) -> dict[str, Any]:
+        return self.record_decisions([{"claim": claim, "score": score, "band": band, "rule_hits": rule_hits,
+                                       "model_reasons": model_reasons}], model_version, config_hash)[0]
+
+    def record_decisions(self, items: list[dict], model_version: str, config_hash: str) -> list[dict[str, Any]]:
+        """Log many decisions in one transaction. Each item has claim, score, band, rule_hits, model_reasons."""
         created = _now()
-        row = {
+        rows = [{
             "created_at": created,
-            "claim_json": canonical_json(claim),
-            "score": round(float(score), 6),
-            "band": band,
-            "rule_hits_json": canonical_json(rule_hits),
-            "model_reasons_json": canonical_json(model_reasons),
+            "claim_json": canonical_json(it["claim"]),
+            "score": round(float(it["score"]), 6),
+            "band": it["band"],
+            "rule_hits_json": canonical_json(it["rule_hits"]),
+            "model_reasons_json": canonical_json(it["model_reasons"]),
             "model_version": model_version,
             "config_hash": config_hash,
-        }
-        return self._append("decisions", row,
-                            lambda seq: {"decision_id": f"d-{created[:4]}-{seq:06d}"})
+        } for it in items]
+        return self._append_many("decisions", rows,
+                                 lambda seq: {"decision_id": f"d-{created[:4]}-{seq:06d}"})
 
     def add_review(self, decision_id: str, outcome: str, reviewer: str, notes: str = "") -> dict[str, Any]:
         if outcome not in OUTCOMES:
@@ -169,6 +182,34 @@ class AuditLog:
             "prev_hash": d["prev_hash"],
             "reviews": [dict(r) for r in reviews],
         }
+
+    def list_decisions(self, bands: list[str] | None = None, reviewed: bool | None = None,
+                       sort: str = "score", limit: int = 100) -> list[dict[str, Any]]:
+        """Review queue: decision summaries with their latest review, if any."""
+        where, params = [], []
+        if bands:
+            where.append(f"d.band IN ({', '.join('?' * len(bands))})")
+            params += bands
+        if reviewed is not None:
+            where.append("l.outcome IS NOT NULL" if reviewed else "l.outcome IS NULL")
+        order = {"score": "d.score DESC, d.seq DESC", "recent": "d.seq DESC"}[sort]
+        query = f"""
+        WITH latest AS (
+            SELECT r.decision_id, r.outcome, r.reviewer FROM reviews r
+            JOIN (SELECT decision_id, MAX(seq) AS seq FROM reviews GROUP BY decision_id) m ON r.seq = m.seq
+        )
+        SELECT d.decision_id, d.created_at, d.score, d.band, d.claim_json, d.rule_hits_json,
+               l.outcome, l.reviewer
+        FROM decisions d LEFT JOIN latest l ON l.decision_id = d.decision_id
+        {"WHERE " + " AND ".join(where) if where else ""}
+        ORDER BY {order} LIMIT ?
+        """
+        with self._connect() as conn:
+            rows = conn.execute(query, [*params, limit]).fetchall()
+        return [{"decision_id": r["decision_id"], "created_at": r["created_at"], "score": r["score"],
+                 "band": r["band"], "claim_ref": json.loads(r["claim_json"]).get("claim_ref"),
+                 "rules_hit": len(json.loads(r["rule_hits_json"])),
+                 "latest_outcome": r["outcome"], "reviewer": r["reviewer"]} for r in rows]
 
     def metrics(self) -> dict[str, Any]:
         """Counts per band, and confirmed-fraud rate among reviewed claims (latest review wins)."""

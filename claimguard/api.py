@@ -15,11 +15,14 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from . import schema as S
 from .audit import AuditLog
+from .explain import load_reasons
 from .rules import config_hash
 from .scoring import ClaimScorer
 
@@ -133,17 +136,21 @@ app = FastAPI(title="ClaimGuard", version="1.0",
               lifespan=lifespan)
 
 
-def _score_and_log(claim: Claim) -> Decision:
-    payload = claim.model_dump()
-    result = state.scorer.score(payload)
-    row = state.audit.record_decision(payload, result["score"], result["band"], result["rule_hits"],
-                                      result["model_reasons"], result["model_version"], state.config_hash)
-    return Decision(decision_id=row["decision_id"], claim_ref=claim.claim_ref, **result)
+def _score_and_log(claims: list[Claim]) -> list[Decision]:
+    """Score claims together and log them in one audit transaction."""
+    payloads = [c.model_dump() for c in claims]
+    results = state.scorer.score_many(payloads)
+    rows = state.audit.record_decisions(
+        [{"claim": p, **{k: r[k] for k in ("score", "band", "rule_hits", "model_reasons")}}
+         for p, r in zip(payloads, results)],
+        state.scorer.model_version, state.config_hash)
+    return [Decision(decision_id=row["decision_id"], claim_ref=c.claim_ref, **r)
+            for c, r, row in zip(claims, results, rows)]
 
 
 @app.post("/score", response_model=Decision)
 def score(claim: Claim) -> Decision:
-    return _score_and_log(claim)
+    return _score_and_log([claim])[0]
 
 
 @app.post("/score/batch")
@@ -157,20 +164,64 @@ async def score_batch(file: UploadFile = File(...)) -> dict:
     if missing:
         raise HTTPException(422, f"CSV is missing columns: {missing}")
     wanted = set(S.FEATURES) | {"claim_ref"}
-    results, errors = [], []
+    good, errors = [], []
     for i, raw in enumerate(reader, start=1):
         if i > MAX_BATCH_ROWS:
             raise HTTPException(413, f"at most {MAX_BATCH_ROWS} rows per batch")
         try:
-            claim = Claim(**{k: v for k, v in raw.items() if k in wanted and v not in (None, "")})
+            good.append((i, Claim(**{k: v for k, v in raw.items() if k in wanted and v not in (None, "")})))
         except ValidationError as e:
             errors.append({"row": i, "errors": [{"field": ".".join(map(str, err["loc"])), "msg": err["msg"]}
                                                 for err in e.errors()]})
-            continue
-        results.append({"row": i, **_score_and_log(claim).model_dump()})
+    # Validate everything first, then score and log the good rows together.
+    decisions = _score_and_log([c for _, c in good]) if good else []
+    results = [{"row": i, **d.model_dump()} for (i, _), d in zip(good, decisions)]
     bands = {b: sum(r["band"] == b for r in results) for b in ("LOW", "MEDIUM", "HIGH")}
     return {"scored": len(results), "rejected": len(errors), "bands": bands,
             "results": results, "errors": errors}
+
+
+@app.get("/decisions")
+def list_decisions(band: list[Literal["LOW", "MEDIUM", "HIGH"]] | None = Query(default=None),
+                   reviewed: bool | None = None,
+                   sort: Literal["score", "recent"] = "score",
+                   limit: int = Query(default=100, ge=1, le=500)) -> list[dict]:
+    """Review queue, e.g. /decisions?band=HIGH&band=MEDIUM&reviewed=false"""
+    return state.audit.list_decisions(band, reviewed, sort, limit)
+
+
+# Form layout for the web UI. Field values and ranges come from schema.py, so the form
+# can never offer a value the API would reject.
+FORM_GROUPS = {
+    "Accident": ["Month", "WeekOfMonth", "DayOfWeek", "AccidentArea", "Fault",
+                 "PoliceReportFiled", "WitnessPresent"],
+    "Claim": ["MonthClaimed", "WeekOfMonthClaimed", "DayOfWeekClaimed", "Days_Policy_Accident",
+              "Days_Policy_Claim", "NumberOfSuppliments", "AgentType"],
+    "Policy": ["PolicyType", "BasePolicy", "Deductible", "PastNumberOfClaims", "AddressChange_Claim",
+               "NumberOfCars"],
+    "Vehicle": ["Make", "VehicleCategory", "VehiclePrice", "AgeOfVehicle"],
+    "Policy holder": ["Sex", "MaritalStatus", "Age", "AgeOfPolicyHolder", "DriverRating"],
+}
+assert sorted(sum(FORM_GROUPS.values(), [])) == sorted(S.FEATURES), "FORM_GROUPS must list every feature"
+
+
+@app.get("/schema")
+def form_schema() -> dict:
+    labels = load_reasons()
+    used = set(state.scorer.columns)
+    groups = []
+    for name, cols in FORM_GROUPS.items():
+        fields = []
+        for c in cols:
+            f = {"name": c, "label": labels.get(c, {}).get("label", c), "used_by_model": c in used}
+            if c in S.CATEGORIES:
+                f.update(type="choice", options=S.CATEGORIES[c])
+            else:
+                lo, hi = S.NUMERIC[c]
+                f.update(type="number", min=lo, max=hi, optional=c == "Age")
+            fields.append(f)
+        groups.append({"name": name, "fields": fields})
+    return {"groups": groups, "example": Claim.model_config["json_schema_extra"]["example"]}
 
 
 @app.get("/decisions/{decision_id}")
@@ -209,3 +260,12 @@ def health() -> dict:
         "config_hash": state.config_hash,
         "config_matches_training": state.config_hash == b.get("config_hash"),
     }
+
+
+# ---------- web UI ----------
+app.mount("/ui", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="ui")
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    return RedirectResponse("/ui/")

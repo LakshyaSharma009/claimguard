@@ -102,20 +102,31 @@ class ClaimScorer:
         return self.model.predict_proba(claims_frame(claims, self.columns))[:, 1]
 
     def score(self, claim: dict, explain: bool = True) -> dict:
+        return self.score_many([claim], explain)[0]
+
+    def score_many(self, claims: list[dict], explain: bool = True) -> list[dict]:
+        """Score a list of claims with one model call and one SHAP call (single claims use this too)."""
         from .rules import evaluate
 
-        prob = float(self.model_probability([claim])[0])
-        rule_score, fired = evaluate(claim, self.rules)
-        final = float(combine(prob, rule_score, self.weight))
-        band = assign_band(final, self.medium, self.high,
-                           strong_rule_hit=any(r.strong for r in fired), strong_min_band=self.strong_min)
-        return {
-            "score": round(final, 4),
-            "band": band.value,
-            "model_probability": round(prob, 4),
-            "rule_score": round(rule_score, 4),
-            "rule_hits": [{"id": r.id, "reason": r.reason, "weight": r.weight, "strong": r.strong}
-                          for r in fired],
-            "model_reasons": self.explainer.reasons(claim, self.reasons) if explain else [],
-            "model_version": self.model_version,
-        }
+        if not claims:
+            return []
+        probs = self.model_probability(claims)
+        all_reasons = self.explainer.reasons_many(claims, self.reasons) if explain else [[] for _ in claims]
+        out = []
+        for claim, prob, model_reasons in zip(claims, probs, all_reasons):
+            prob = float(prob)
+            rule_score, fired = evaluate(claim, self.rules)
+            final = float(combine(prob, rule_score, self.weight))
+            band = assign_band(final, self.medium, self.high,
+                               strong_rule_hit=any(r.strong for r in fired), strong_min_band=self.strong_min)
+            out.append({
+                "score": round(final, 4),
+                "band": band.value,
+                "model_probability": round(prob, 4),
+                "rule_score": round(rule_score, 4),
+                "rule_hits": [{"id": r.id, "reason": r.reason, "weight": r.weight, "strong": r.strong}
+                              for r in fired],
+                "model_reasons": model_reasons,
+                "model_version": self.model_version,
+            })
+        return out

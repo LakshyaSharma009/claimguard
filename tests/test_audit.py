@@ -77,3 +77,13 @@ def test_cli_exit_codes(log):
     assert main(["verify", "--db", log.path]) == 0
     _tamper(log.path, "UPDATE decisions SET score = 0.99 WHERE seq = 2")
     assert main(["verify", "--db", log.path]) == 1
+
+
+def test_record_decisions_writes_one_valid_chain(tmp_path):
+    log = AuditLog(tmp_path / "a.db")
+    log.record_decision({"claim": 0}, 0.1, "LOW", [], [], "test-v1", "cfg")
+    items = [{"claim": {"claim": i}, "score": 0.1 * i, "band": "LOW", "rule_hits": [], "model_reasons": []}
+             for i in range(1, 6)]
+    rows = log.record_decisions(items, "test-v1", "cfg")
+    assert [r["seq"] for r in rows] == [2, 3, 4, 5, 6]
+    assert log.verify() == {"ok": True, "rows": {"decisions": 6, "reviews": 0}, "problems": []}
