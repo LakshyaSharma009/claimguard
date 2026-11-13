@@ -1,0 +1,27 @@
+split years  claims  fraud  fraud_rate
+train  1994    6141    409      0.0666
+valid  1995    5195    301      0.0579
+ test  1996    4083    213      0.0522
+                features  cv_pr_auc_1994  valid_pr_auc_1995
+   with calendar columns           0.274              0.117
+without calendar columns           0.245              0.186
+Calendar columns: dropped
+Model comparison (5-fold stratified CV on 1994):
+  Logistic Regression (balanced)     PR-AUC 0.208 ± 0.026
+  Random Forest (balanced_subsample) PR-AUC 0.240 ± 0.028
+  HistGradientBoosting (defaults)    PR-AUC 0.245 ± 0.009
+  HistGradientBoosting (tuned)       PR-AUC 0.287  {'min_samples_leaf': 20, 'max_leaf_nodes': 7, 'max_iter': 100, 'max_depth': 4, 'learning_rate': 0.05, 'l2_regularization': 0.1}
+Best model: hgb {'min_samples_leaf': 20, 'max_leaf_nodes': 7, 'max_iter': 100, 'max_depth': 4, 'learning_rate': 0.05, 'l2_regularization': 0.1}
+  hgb + SMOTE (no class weight)      PR-AUC 0.253 ± 0.034
+  hgb + class weights                PR-AUC 0.287 ± 0.024
+Fairness: PR-AUC gap with-vs-without = +0.0255; dropping ['Sex', 'Age', 'AgeOfPolicyHolder']
+Combine weight 1.0; thresholds MEDIUM >= 0.0944, HIGH >= 0.2089
+                          scorer  valid_pr_auc  test_pr_auc  test_roc_auc  recall_top10  precision@review  recall@review  review_rate
+                      Rules only         0.075        0.062         0.532         0.150             0.143          0.028        0.010
+         Model only (calibrated)         0.192        0.136         0.778         0.263             0.110          0.549        0.261
+Combined (1.0 model + 0.0 rules)         0.192        0.136         0.778         0.263             0.110          0.549        0.261
+  band  claims  share  fraud  fraud_rate  share_of_all_fraud
+   LOW    2902  0.711     92       0.032               0.432
+MEDIUM     938  0.230     90       0.096               0.423
+  HIGH     243  0.060     31       0.128               0.146
+Saved C:\Users\laksh\OneDrive\Desktop\al\models\claimguard_model.joblib and reports in C:\Users\laksh\OneDrive\Desktop\al\reports

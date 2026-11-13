@@ -1,0 +1,86 @@
+"""SHAP reason codes: turn model contributions into sentences an investigator can read."""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Mapping
+
+import numpy as np
+import pandas as pd
+import shap
+import yaml
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+
+from .data import claims_frame
+from .features import source_feature
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_REASONS = ROOT / "config" / "reasons.yaml"
+
+
+def load_reasons(path: str | Path = DEFAULT_REASONS) -> dict[str, Any]:
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))["features"]
+
+
+def reason_text(feature: str, value: Any, reasons: Mapping[str, Any]) -> str:
+    entry = reasons.get(feature, {})
+    values = entry.get("values", {})
+    if value is not None and str(value) in values:
+        return values[str(value)]
+    label = entry.get("label", feature)
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return f"{label}: not recorded"
+    if isinstance(value, (float, np.floating)) and float(value).is_integer():
+        value = int(value)
+    return entry.get("template", "{label}: {value}").format(label=label, value=value)
+
+
+class Explainer:
+    """Wraps a fitted preprocess+classifier pipeline and explains single claims.
+
+    Contributions are in log-odds of the uncalibrated model. Calibration is a
+    monotone map of that score, so the ranking of reasons is unchanged.
+    """
+
+    def __init__(self, pipeline: Pipeline, columns: list[str], background: pd.DataFrame | None = None):
+        self.prep = pipeline.named_steps["prep"]
+        self.clf = pipeline.named_steps["clf"]
+        self.columns = columns
+        self.encoded_names = list(self.prep.get_feature_names_out())
+        self.groups = [source_feature(n, columns) for n in self.encoded_names]
+        if isinstance(self.clf, LogisticRegression):
+            if background is None:
+                raise ValueError("a linear model needs background data")
+            self.explainer = shap.LinearExplainer(self.clf, self.prep.transform(background[columns]))
+        else:
+            self.explainer = shap.TreeExplainer(self.clf)
+
+    def encoded_shap(self, X: pd.DataFrame) -> np.ndarray:
+        values = self.explainer.shap_values(self.prep.transform(X[self.columns]))
+        if isinstance(values, list):          # older SHAP: one array per class
+            values = values[1]
+        values = np.asarray(values)
+        if values.ndim == 3:                  # (rows, features, classes)
+            values = values[..., 1]
+        return values
+
+    def grouped_shap(self, X: pd.DataFrame) -> pd.DataFrame:
+        """One SHAP value per raw column: one-hot pieces are summed back together."""
+        enc = pd.DataFrame(self.encoded_shap(X), columns=self.encoded_names)
+        return enc.T.groupby(self.groups, sort=False).sum().T[self.columns]
+
+    def reasons(self, claim: Mapping[str, Any], reasons: Mapping[str, Any], top: int = 3) -> list[dict]:
+        row = claims_frame([dict(claim)], self.columns)
+        contrib = self.grouped_shap(row).iloc[0].sort_values(ascending=False)
+        out = []
+        for feature, impact in contrib.items():
+            if impact <= 0 or len(out) >= top:
+                break
+            value = row.at[0, feature]
+            # Plain Python types, so the audit log stores 500, not the string "500".
+            value = None if pd.isna(value) else (value.item() if isinstance(value, np.generic) else value)
+            out.append({"feature": feature,
+                        "value": value,
+                        "text": reason_text(feature, value, reasons),
+                        "impact": round(float(impact), 4)})
+        return out

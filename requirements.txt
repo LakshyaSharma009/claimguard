@@ -1,0 +1,13 @@
+# Pinned: the saved model is a pickle and must load with the same scikit-learn.
+numpy==2.5.4
+pandas==3.1.1
+scikit-learn==1.9.1
+imbalanced-learn==0.14.2
+shap==0.54.1
+matplotlib==3.11.2
+PyYAML==6.0.3
+fastapi==0.162.5
+uvicorn==0.54.0
+python-multipart==0.0.33
+pydantic==2.14.3
+joblib==1.6.0

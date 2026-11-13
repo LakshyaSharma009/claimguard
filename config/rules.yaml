@@ -1,0 +1,72 @@
+# ClaimGuard red-flag rules.
+#
+# Each rule:
+#   id       unique name
+#   when     every listed field must match (a value, or a list of allowed values)
+#   any      optional: at least one of these condition groups must also match
+#   weight   added to the rule score when the rule fires (the total is capped at 1.0)
+#   strong   optional: if true, a claim hitting this rule is sent to at least MEDIUM
+#   enabled  set to false to switch a rule off without deleting it
+#   reason   plain-English text shown to the investigator
+#
+# Values must be spelled exactly as in the claim data (see claimguard/schema.py).
+#
+# Keep / drop policy (measured on the 1994 training year, see reports/rule_hit_rates.md):
+#   keep a rule only if the fraud share of the claims it flags is at least 1.5x the base rate.
+#   mark it strong only if that fraud share beats the cost break-even 1 / (1 + cost_ratio),
+#   i.e. reviewing every claim it flags is cheaper than missing the fraud among them.
+
+rules:
+  - id: R01_EARLY_ACCIDENT
+    # "none" is read as 0 days: the accident happened on the day the policy started.
+    when: { Days_Policy_Accident: ["none", "1 to 7", "8 to 15"] }
+    weight: 0.25
+    strong: true
+    enabled: true
+    reason: Accident within 15 days of the policy starting
+
+  - id: R02_NO_EVIDENCE
+    when: { PoliceReportFiled: "No", WitnessPresent: "No" }
+    weight: 0.15
+    # Dropped: fires on 97% of claims with a fraud share equal to the base rate (lift 1.0).
+    enabled: false
+    reason: No police report and no witness, so nothing independent to verify the accident
+
+  - id: R03_RECENT_ADDRESS_CHANGE
+    # Widened from "within a year" to "within 3 years": the 2-to-3-year range carries the signal.
+    when: { AddressChange_Claim: ["under 6 months", "1 year", "2 to 3 years"] }
+    weight: 0.20
+    strong: true
+    enabled: true
+    reason: Address changed within 3 years of the claim
+
+  - id: R04_FREQUENT_CLAIMANT
+    when: { PastNumberOfClaims: "more than 4" }
+    weight: 0.15
+    # Dropped: frequent claimants are LESS likely to be fraud in this data (lift 0.35).
+    enabled: false
+    reason: Frequent claimant (more than 4 earlier claims)
+
+  - id: R05_MANY_SUPPLEMENTS
+    when: { NumberOfSuppliments: "more than 5" }
+    weight: 0.15
+    # Dropped: fraud share below the base rate (lift 0.81).
+    enabled: false
+    reason: Claim grew after it was first filed (more than 5 supplements)
+
+  - id: R06_COVERAGE_MISMATCH
+    when: { BasePolicy: "All Perils" }
+    any:
+      - { AgeOfVehicle: ["7 years", "more than 7"] }
+      - { VehiclePrice: "less than 20000" }
+    weight: 0.20
+    enabled: true
+    reason: Old or low-value vehicle on an all-perils policy, so coverage does not match the vehicle
+
+  - id: R07_EARLY_CLAIM
+    # Added: claim filed within 30 days of the policy starting.
+    when: { Days_Policy_Claim: ["8 to 15", "15 to 30"] }
+    weight: 0.25
+    strong: true
+    enabled: true
+    reason: Claim filed within 30 days of the policy starting

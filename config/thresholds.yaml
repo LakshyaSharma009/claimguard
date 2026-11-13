@@ -1,0 +1,23 @@
+# Business assumptions behind the review bands. These are ASSUMPTIONS, not facts
+# from the data: change them to match a real insurer's costs and team size, then retrain.
+
+# Cost of missing one fraudulent claim, relative to the cost of reviewing one
+# honest claim (10 means a missed fraud costs ten reviews).
+cost_ratio: 10
+
+# Share of all claims the investigation team can take as HIGH.
+high_capacity: 0.05
+
+# Starting weight of the model probability in the combined score
+# (combined = w * model + (1 - w) * rule score). Training searches
+# combine_weight_grid on the validation year and keeps the best PR-AUC.
+combine_weight: 0.7
+combine_weight_grid: [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+# Band given at minimum to a claim that hits a rule marked strong.
+strong_rule_min_band: MEDIUM
+
+# Policy, not a tuning choice: Sex, Age and AgeOfPolicyHolder are not used by the
+# shipped model. Training still fits both versions and reports the cost of this
+# choice (PR-AUC) and its effect (flag rate per group) in reports/fairness.md.
+use_protected_attributes: false

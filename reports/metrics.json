@@ -1,0 +1,51 @@
+{
+  "model_version": "hgb-v1",
+  "kind": "hgb",
+  "params": {
+    "min_samples_leaf": 20,
+    "max_leaf_nodes": 7,
+    "max_iter": 100,
+    "max_depth": 4,
+    "learning_rate": 0.05,
+    "l2_regularization": 0.1
+  },
+  "keep_protected": false,
+  "include_calendar": false,
+  "use_smote": false,
+  "combine_weight": 1.0,
+  "thresholds": {
+    "medium": 0.09440811531766963,
+    "high": 0.20887991879070955
+  },
+  "cost_ratio": 10.0,
+  "high_capacity": 0.05,
+  "valid_cost_per_claim": 0.40461982675649666,
+  "test": {
+    "pr_auc": 0.1358298646335404,
+    "roc_auc": 0.7780737829214737,
+    "threshold": 0.09440811531766963,
+    "precision": 0.10985915492957747,
+    "recall": 0.5492957746478874,
+    "flag_rate": 0.26083761939750183,
+    "recall_top10": 0.26291079812206575,
+    "brier": 0.048030601713262025,
+    "confusion": {
+      "tn": 2922,
+      "fp": 948,
+      "fn": 96,
+      "tp": 117
+    },
+    "recall_top10_model_only": 0.26291079812206575,
+    "band_policy": {
+      "precision": 0.10245554614733277,
+      "recall": 0.568075117370892,
+      "review_rate": 0.28924810188586825,
+      "confusion": {
+        "tn": 2810,
+        "fp": 1060,
+        "fn": 92,
+        "tp": 121
+      }
+    }
+  }
+}

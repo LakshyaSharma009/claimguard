@@ -1,0 +1,137 @@
+# Plain-English text for model reasons (SHAP reason codes).
+#
+# For each claim, the API takes the 3 features that pushed the model score up the
+# most and looks them up here:
+#   values    exact sentence for a specific value
+#   label     short name used when no value sentence exists
+#   template  fallback pattern, default "{label}: {value}"
+
+features:
+  Fault:
+    label: Who caused the accident
+    values:
+      Policy Holder: Policy holder was at fault
+      Third Party: A third party was at fault
+  BasePolicy:
+    label: Policy type
+    values:
+      All Perils: All-perils policy (widest cover)
+      Collision: Collision policy
+      Liability: Liability-only policy
+  PolicyType:
+    label: Policy and vehicle type
+    template: "Policy and vehicle type: {value}"
+  VehicleCategory:
+    label: Vehicle category
+    values:
+      Sedan: Sedan, the vehicle type with most fraud in the data
+      Sport: Sport vehicle
+      Utility: Utility vehicle
+  VehiclePrice:
+    label: Vehicle price
+    values:
+      less than 20000: Low-value vehicle (under 20,000)
+      more than 69000: High-value vehicle (over 69,000)
+    template: "Vehicle price {value}"
+  AgeOfVehicle:
+    label: Vehicle age
+    values:
+      new: Brand-new vehicle
+      more than 7: Vehicle older than 7 years
+    template: "Vehicle age: {value}"
+  Days_Policy_Accident:
+    label: Days from policy start to accident
+    values:
+      none: Accident on the day the policy started
+      1 to 7: Accident within a week of the policy starting
+      8 to 15: Accident 8 to 15 days after the policy started
+      15 to 30: Accident 15 to 30 days after the policy started
+      more than 30: Accident more than 30 days after the policy started
+  Days_Policy_Claim:
+    label: Days from policy start to claim
+    values:
+      8 to 15: Claim filed 8 to 15 days after the policy started
+      15 to 30: Claim filed 15 to 30 days after the policy started
+      more than 30: Claim filed more than 30 days after the policy started
+  PastNumberOfClaims:
+    label: Earlier claims
+    values:
+      none: No earlier claims on record (new claimant)
+      "1": One earlier claim
+      2 to 4: 2 to 4 earlier claims
+      more than 4: More than 4 earlier claims
+  NumberOfSuppliments:
+    label: Supplements filed
+    values:
+      none: No supplements filed
+    template: "{value} supplements filed"
+  AddressChange_Claim:
+    label: Address change before the claim
+    values:
+      no change: No address change
+      under 6 months: Address changed under 6 months before the claim
+      1 year: Address changed about a year before the claim
+      2 to 3 years: Address changed 2 to 3 years before the claim
+      4 to 8 years: Address changed 4 to 8 years before the claim
+  PoliceReportFiled:
+    label: Police report
+    values:
+      "No": No police report filed
+      "Yes": Police report filed
+  WitnessPresent:
+    label: Witness
+    values:
+      "No": No witness present
+      "Yes": Witness present
+  AgentType:
+    label: Sales channel
+    values:
+      External: Sold through an external agent
+      Internal: Sold through an internal agent
+  AccidentArea:
+    label: Accident area
+    values:
+      Urban: Accident in an urban area
+      Rural: Accident in a rural area
+  Make:
+    label: Vehicle make
+    template: "Vehicle make: {value}"
+  Deductible:
+    label: Deductible
+    template: "Deductible of {value}"
+  DriverRating:
+    label: Driver rating
+    template: "Driver rating {value}"
+  NumberOfCars:
+    label: Cars on the policy
+    template: "Cars on the policy: {value}"
+  MaritalStatus:
+    label: Marital status
+    template: "Marital status: {value}"
+  Month:
+    label: Month of accident
+    template: "Accident in {value}"
+  MonthClaimed:
+    label: Month of claim
+    template: "Claim filed in {value}"
+  DayOfWeek:
+    label: Day of accident
+    template: "Accident on a {value}"
+  DayOfWeekClaimed:
+    label: Day of claim
+    template: "Claim filed on a {value}"
+  WeekOfMonth:
+    label: Week of month of accident
+    template: "Accident in week {value} of the month"
+  WeekOfMonthClaimed:
+    label: Week of month of claim
+    template: "Claim filed in week {value} of the month"
+  Sex:
+    label: Sex
+    template: "Sex: {value}"
+  Age:
+    label: Age
+    template: "Policy holder age {value}"
+  AgeOfPolicyHolder:
+    label: Policy holder age band
+    template: "Policy holder aged {value}"
